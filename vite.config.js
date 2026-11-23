@@ -25,7 +25,8 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,wasm}'],
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         runtimeCaching: [
           { urlPattern: /\/data\/.*\.json$/, handler: 'NetworkFirst', options: { cacheName: 'price-data' } },
         ],

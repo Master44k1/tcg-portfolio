@@ -1,11 +1,16 @@
 // Lädt die täglich erzeugten Cardmarket-Preisdaten (siehe scripts/fetch-cardmarket.mjs).
+// Wert = i18n-Schlüssel
 export const PRICE_FIELDS = {
-  trend: 'Trendpreis',
-  avg30: 'Ø 30 Tage',
-  avg7: 'Ø 7 Tage',
-  avg: 'Ø Verkaufspreis',
-  low: 'Ab-Preis',
+  trend: 'priceTrend',
+  avg30: 'priceAvg30',
+  avg7: 'priceAvg7',
+  avg: 'priceAvg',
+  low: 'priceLow',
 };
+
+let LOCALE = 'de-DE';
+export const setLocale = (l) => { LOCALE = l; };
+export const fmtDate = (d) => new Date(d).toLocaleDateString(LOCALE);
 
 export async function loadIndex() {
   const res = await fetch('data/index.json', { cache: 'no-cache' });
@@ -69,7 +74,10 @@ export function cardmarketUrl(game, name) {
 }
 
 export const eur = (v) =>
-  v == null ? '–' : v.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' });
+  v == null ? '–' : v.toLocaleString(LOCALE, { style: 'currency', currency: 'EUR' });
 export const pct = (v) =>
-  v == null || !Number.isFinite(v) ? '' : `${v >= 0 ? '+' : ''}${v.toLocaleString('de-DE', { maximumFractionDigits: 1 })} %`;
+  v == null || !Number.isFinite(v) ? '' : `${v >= 0 ? '+' : ''}${v.toLocaleString(LOCALE, { maximumFractionDigits: 1 })} %`;
+
+// Veränderung des Trendpreises gegenüber einem Durchschnitt, in Prozent
+export const change = (now, base) => (now && base ? (now / base - 1) * 100 : null);
 

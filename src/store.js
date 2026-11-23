@@ -6,7 +6,7 @@ const empty = () => ({
   holdings: [], // {id, game, productId, name, category, qty, buyPrice, buyDate, note}
   barcodes: {}, // ean -> {game, productId}
   history: [], // {date, value, cost}
-  settings: { priceField: 'trend', game: 6 },
+  settings: { priceField: 'trend', game: 6, lang: null, theme: 'auto', accent: 'gold', bg: 'glow' },
 });
 
 export function load() {
@@ -29,7 +29,7 @@ export function save(state) {
 }
 
 export function validateImport(obj) {
-  if (!obj || !Array.isArray(obj.holdings)) throw new Error('Keine gültige Portfolio-Datei');
+  if (!obj || !Array.isArray(obj.holdings)) throw new Error('invalidFile');
   return { ...empty(), ...obj, settings: { ...empty().settings, ...(obj.settings || {}) } };
 }
 
