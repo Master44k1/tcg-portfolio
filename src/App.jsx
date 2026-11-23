@@ -12,10 +12,11 @@ export default function App() {
   const [state, setState] = useState(load);
   const [tab, setTab] = useState('portfolio');
   const [addMode, setAddMode] = useState('search');
-  const [catalog, setCatalog] = useState(null);
+  const [catalogs, setCatalogs] = useState(null);
   const [index, setIndex] = useState(null);
   const [loadError, setLoadError] = useState('');
   const [photos, setPhotos] = useState({});
+  const [folder, setFolder] = useState('all');
 
   const update = useCallback((fn) => setState((s) => {
     const next = fn(s);
@@ -57,27 +58,22 @@ export default function App() {
   useEffect(() => {
     let alive = true;
     let stamp = null;
-    setCatalog(null);
-    Promise.all([loadIndex(), loadGame(game)])
-      .then(([idx, cat]) => { if (alive) { stamp = idx.updatedAt; setIndex(idx); setCatalog(cat); setLoadError(''); } })
-      .catch((e) => alive && setLoadError(e.message));
+    const loadAll = async () => {
+      const idx = await loadIndex();
+      if (!alive || idx.updatedAt === stamp) return;
+      const cats = await Promise.all(idx.games.map((g) => loadGame(g.game).catch(() => null)));
+      if (!alive) return;
+      const map = {};
+      idx.games.forEach((g, i) => { if (cats[i]) map[g.game] = cats[i]; });
+      stamp = idx.updatedAt;
+      setIndex(idx);
+      setCatalogs(map);
+      setLoadError('');
+    };
+    loadAll().catch((e) => alive && setLoadError(e.message));
 
     // Neue Preise automatisch nachladen: beim Zurückkehren in die App und alle 30 Minuten
-    const refresh = async () => {
-      if (document.visibilityState !== 'visible') return;
-      try {
-        const idx = await loadIndex();
-        if (!alive || idx.updatedAt === stamp) return;
-        const cat = await loadGame(game);
-        if (!alive) return;
-        stamp = idx.updatedAt;
-        setIndex(idx);
-        setCatalog(cat);
-        setLoadError('');
-      } catch {
-        /* offline: alte Preise behalten */
-      }
-    };
+    const refresh = () => { if (document.visibilityState === 'visible') loadAll().catch(() => {}); };
     document.addEventListener('visibilitychange', refresh);
     const timer = setInterval(refresh, 30 * 60 * 1000);
     return () => {
@@ -85,15 +81,18 @@ export default function App() {
       document.removeEventListener('visibilitychange', refresh);
       clearInterval(timer);
     };
-  }, [game]);
+  }, []);
+
+  const catalog = catalogs?.[game] || (catalogs && Object.values(catalogs)[0]) || null;
+  const nm = useCallback((p, fallback) => (p ? (lang === 'de' ? p.nameDe : p.name) : fallback), [lang]);
 
   const rows = useMemo(() => state.holdings.map((h) => {
-    const product = h.game === game ? catalog?.byId.get(h.productId) : null;
+    const product = catalogs?.[h.game]?.byId.get(h.productId) || null;
     const unit = priceOf(product, field);
     const value = unit == null ? null : unit * h.qty;
     const cost = (h.buyPrice || 0) * h.qty;
-    return { ...h, product, unit, value, cost };
-  }), [state.holdings, catalog, field, game]);
+    return { ...h, product, unit, value, cost, display: nm(product, h.name) };
+  }), [state.holdings, catalogs, field, nm]);
 
   const totals = useMemo(() => {
     const value = rows.reduce((a, r) => a + (r.value ?? 0), 0);
@@ -104,18 +103,20 @@ export default function App() {
 
   // Tageswert für den Verlauf speichern (ein Eintrag pro Tag)
   useEffect(() => {
-    if (!catalog || !state.holdings.length) return;
+    if (!catalogs || !state.holdings.length) return;
     const d = today();
     const v = Math.round(totals.value * 100) / 100;
     const c = Math.round(totals.cost * 100) / 100;
     const last = state.history[state.history.length - 1];
     if (last && last.date === d && last.value === v && last.cost === c) return;
     update((s) => ({ ...s, history: [...s.history.filter((x) => x.date !== d), { date: d, value: v, cost: c }].slice(-730) }));
-  }, [catalog, totals.value, totals.cost, state.holdings.length, state.history, update]);
+  }, [catalogs, totals.value, totals.cost, state.holdings.length, state.history, update]);
 
-  const gameInfo = index?.games.find((g) => g.game === game);
+  const gameInfo = index?.games.find((g) => g.game === catalog?.game) || index?.games[0];
+  const games = index?.games || [];
+  const urlNameOf = (g) => games.find((x) => x.game === g)?.urlName || 'Pokemon';
   const go = (next, mode) => { setAddMode(mode || 'search'); setTab(next); window.scrollTo(0, 0); };
-  const ctx = { t, update, catalog, field, photos, savePhoto, removePhoto, game };
+  const ctx = { t, update, catalog, catalogs, field, photos, savePhoto, removePhoto, game: catalog?.game ?? game, games, nm, urlNameOf, folders: state.folders || [], folder, setFolder, setGame: (g) => update((s) => ({ ...s, settings: { ...s.settings, game: g } })) };
 
   return (
     <div className="app">
@@ -154,9 +155,20 @@ export default function App() {
 }
 
 function Thumb({ src, name, size = 48 }) {
-  if (src) return <img className="thumb" src={src} alt="" style={{ width: size, height: size }} />;
-  const initials = name.split(/\s+/).filter((w) => /^[A-Za-z0-9]/.test(w)).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [src]);
+  if (src && !broken) return <img className="thumb" src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} style={{ width: size, height: size }} />;
+  const initials = name.split(/\s+/).filter((w) => /^[A-Za-z0-9ÄÖÜäöü]/.test(w)).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
   return <div className="thumb placeholder" style={{ width: size, height: size }} aria-hidden="true">{initials}</div>;
+}
+
+function GamePicker({ games, game, setGame }) {
+  if (games.length < 2) return null;
+  return (
+    <div className="seg">
+      {games.map((g) => <button key={g.game} className={g.game === game ? 'on' : ''} onClick={() => setGame(g.game)}>{g.gameName}</button>)}
+    </div>
+  );
 }
 
 function PhotoButtons({ t, pkey, photos, savePhoto, removePhoto }) {
@@ -191,16 +203,71 @@ function Sparkline({ history, t }) {
   );
 }
 
-function Portfolio({ t, rows, history, update, catalog, field, onAdd, photos, savePhoto, removePhoto }) {
+function FolderBar({ t, folders, folder, setFolder, update, rows }) {
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState('');
+  const [editing, setEditing] = useState(false);
+  const count = (id) => rows.filter((r) => (id === 'all' ? true : r.folderId === id)).reduce((a, r) => a + r.qty, 0);
+  const create = (e) => {
+    e.preventDefault();
+    const n = name.trim();
+    if (!n) return;
+    const id = uid();
+    update((s) => ({ ...s, folders: [...(s.folders || []), { id, name: n }] }));
+    setName('');
+    setCreating(false);
+    setFolder(id);
+  };
+  const current = folders.find((f) => f.id === folder);
+  return (
+    <div className="stack tight">
+      <div className="chips">
+        <button className={`chip ${folder === 'all' ? 'on' : ''}`} onClick={() => setFolder('all')}>{t('allItems')} · {count('all')}</button>
+        {folders.map((f) => (
+          <button key={f.id} className={`chip ${folder === f.id ? 'on' : ''}`} onClick={() => { setFolder(f.id); setEditing(false); }}>📁 {f.name} · {count(f.id)}</button>
+        ))}
+        <button className="chip ghost" onClick={() => setCreating(!creating)}>{t('newFolder')}</button>
+      </div>
+      {creating && (
+        <form className="row gap" onSubmit={create}>
+          <input autoFocus placeholder={t('folderName')} value={name} onChange={(e) => setName(e.target.value)} />
+          <button className="primary" type="submit">{t('create')}</button>
+        </form>
+      )}
+      {current && !creating && (
+        editing ? (
+          <div className="card stack">
+            <form className="row gap" onSubmit={(e) => { e.preventDefault(); const n = name.trim(); if (n) update((s) => ({ ...s, folders: s.folders.map((f) => (f.id === current.id ? { ...f, name: n } : f)) })); setEditing(false); }}>
+              <input autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+              <button className="primary" type="submit">{t('save')}</button>
+            </form>
+            <button className="danger" onClick={() => { update((s) => ({ ...s, folders: s.folders.filter((f) => f.id !== current.id), holdings: s.holdings.map((h) => (h.folderId === current.id ? { ...h, folderId: null } : h)) })); setFolder('all'); setEditing(false); }}>{t('deleteFolder')}</button>
+            <p className="sub">{t('deleteFolderHint')}</p>
+          </div>
+        ) : (
+          <button className="link left" onClick={() => { setName(current.name); setEditing(true); }}>{t('rename')} / {t('deleteFolder')}</button>
+        )
+      )}
+    </div>
+  );
+}
+
+function Portfolio({ t, rows, history, update, catalogs, onAdd, photos, savePhoto, removePhoto, folders, folder, setFolder, field, urlNameOf }) {
   const [editing, setEditing] = useState(null);
   const [sort, setSort] = useState('value');
+  const visible = useMemo(() => (folder === 'all' ? rows : rows.filter((r) => r.folderId === folder)), [rows, folder]);
   const sorted = useMemo(() => {
-    const r = [...rows];
+    const r = [...visible];
     if (sort === 'value') r.sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
     if (sort === 'pl') r.sort((a, b) => (b.value ?? 0) - b.cost - ((a.value ?? 0) - a.cost));
-    if (sort === 'name') r.sort((a, b) => a.name.localeCompare(b.name));
+    if (sort === 'name') r.sort((a, b) => a.display.localeCompare(b.display));
     return r;
-  }, [rows, sort]);
+  }, [visible, sort]);
+  const sub = useMemo(() => {
+    const value = visible.reduce((a, r) => a + (r.value ?? 0), 0);
+    const cost = visible.reduce((a, r) => a + r.cost, 0);
+    return { value, cost, pl: value - cost };
+  }, [visible]);
 
   if (!rows.length) {
     return (
@@ -212,7 +279,17 @@ function Portfolio({ t, rows, history, update, catalog, field, onAdd, photos, sa
   }
   return (
     <>
-      <Sparkline history={history} t={t} />
+      {folder === 'all' && <Sparkline history={history} t={t} />}
+      <FolderBar t={t} folders={folders} folder={folder} setFolder={setFolder} update={update} rows={rows} />
+      {folder !== 'all' && (
+        <div className="card row between folder-total">
+          <span className="label">{t('folderTotal')}</span>
+          <span className="right">
+            <span className="name">{eur(sub.value)}</span>{' '}
+            {sub.cost > 0 && <span className={sub.pl >= 0 ? 'up' : 'down'}>{eur(sub.pl)} {pct((sub.pl / sub.cost) * 100)}</span>}
+          </span>
+        </div>
+      )}
       <div className="row between">
         <span className="label">{t(PRICE_FIELDS[field])} · Cardmarket</span>
         <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label={t('sort')}>
@@ -221,6 +298,7 @@ function Portfolio({ t, rows, history, update, catalog, field, onAdd, photos, sa
           <option value="name">{t('byName')}</option>
         </select>
       </div>
+      {!sorted.length && <p className="sub">{t('folderEmpty')}</p>}
       <ul className="list">
         {sorted.map((r) => {
           const pl = r.value == null ? null : r.value - r.cost;
@@ -228,9 +306,9 @@ function Portfolio({ t, rows, history, update, catalog, field, onAdd, photos, sa
           return (
             <li key={r.id} className="card">
               <div className="row top-align">
-                <Thumb src={photos[pkey]} name={r.name} size={56} />
+                <Thumb src={photos[pkey] || r.product?.image} name={r.display} size={56} />
                 <div className="grow">
-                  <div className="name">{r.name}</div>
+                  <div className="name">{r.display}</div>
                   <div className="sub">{r.category}{r.buyDate ? ` · ${t('bought', { d: fmtDate(r.buyDate) })}` : ''}</div>
                 </div>
                 <div className="right">
@@ -241,12 +319,12 @@ function Portfolio({ t, rows, history, update, catalog, field, onAdd, photos, sa
               <div className="row between sub">
                 <span>{r.qty} × {eur(r.unit)} {r.buyPrice ? `(${t('buyShort', { v: eur(r.buyPrice) })})` : ''}</span>
                 <span className="row gap">
-                  <a href={cardmarketUrl(r.game, r.name)} target="_blank" rel="noreferrer">Cardmarket</a>
+                  <a href={cardmarketUrl(urlNameOf(r.game), r.name)} target="_blank" rel="noreferrer">Cardmarket</a>
                   <button className="link" onClick={() => setEditing(editing === r.id ? null : r.id)}>{t('edit')}</button>
                 </span>
               </div>
               {editing === r.id && (
-                <EditHolding t={t} holding={r} update={update} onClose={() => setEditing(null)}>
+                <EditHolding t={t} holding={r} update={update} folders={folders} onClose={() => setEditing(null)}>
                   <PhotoButtons t={t} pkey={pkey} photos={photos} savePhoto={savePhoto} removePhoto={removePhoto} />
                 </EditHolding>
               )}
@@ -254,17 +332,30 @@ function Portfolio({ t, rows, history, update, catalog, field, onAdd, photos, sa
           );
         })}
       </ul>
-      {!catalog && <p className="sub center">{t('loadingPrices')}</p>}
+      {!catalogs && <p className="sub center">{t('loadingPrices')}</p>}
     </>
   );
 }
 
-function EditHolding({ t, holding, update, onClose, children }) {
+function FolderSelect({ t, folders, value, onChange }) {
+  if (!folders.length) return null;
+  return (
+    <label>{t('folder')}
+      <select value={value || ''} onChange={(e) => onChange(e.target.value || null)}>
+        <option value="">{t('noFolder')}</option>
+        {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function EditHolding({ t, holding, update, folders, onClose, children }) {
   const [qty, setQty] = useState(holding.qty);
   const [buy, setBuy] = useState(holding.buyPrice ?? '');
   const [date, setDate] = useState(holding.buyDate || '');
+  const [folderId, setFolderId] = useState(holding.folderId || null);
   const saveIt = () => {
-    update((s) => ({ ...s, holdings: s.holdings.map((h) => h.id === holding.id ? { ...h, qty: Math.max(1, Number(qty) || 1), buyPrice: buy === '' ? null : Number(String(buy).replace(',', '.')), buyDate: date || null } : h) }));
+    update((s) => ({ ...s, holdings: s.holdings.map((h) => h.id === holding.id ? { ...h, qty: Math.max(1, Number(qty) || 1), buyPrice: buy === '' ? null : Number(String(buy).replace(',', '.')), buyDate: date || null, folderId } : h) }));
     onClose();
   };
   const remove = () => update((s) => ({ ...s, holdings: s.holdings.filter((h) => h.id !== holding.id) }));
@@ -273,6 +364,7 @@ function EditHolding({ t, holding, update, onClose, children }) {
       <label>{t('quantity')}<input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} /></label>
       <label>{t('buyPriceUnit')}<input inputMode="decimal" value={buy} onChange={(e) => setBuy(e.target.value)} /></label>
       <label>{t('buyDate')}<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+      <FolderSelect t={t} folders={folders} value={folderId} onChange={setFolderId} />
       {children}
       <div className="row gap">
         <button className="primary" onClick={saveIt}>{t('save')}</button>
@@ -284,7 +376,7 @@ function EditHolding({ t, holding, update, onClose, children }) {
 
 const MIN_PRICES = [0, 10, 25, 50, 100, 250];
 
-function Market({ t, rows, catalog, photos, game }) {
+function Market({ t, rows, catalog, photos, game, games, setGame, nm, urlNameOf }) {
   const [scope, setScope] = useState(rows.length ? 'mine' : 'all');
   const [min, setMin] = useState(25);
   const [q, setQ] = useState('');
@@ -298,10 +390,10 @@ function Market({ t, rows, catalog, photos, game }) {
       const byProduct = new Map();
       for (const r of rows) {
         if (!r.product) continue;
-        const e = byProduct.get(r.productId) || { p: r.product, qty: 0, cost: 0, costQty: 0 };
-        e.qty += r.qty;
+        const k = `${r.game}-${r.productId}`;
+        const e = byProduct.get(k) || { p: r.product, cost: 0, costQty: 0 };
         if (r.buyPrice) { e.cost += r.buyPrice * r.qty; e.costQty += r.qty; }
-        byProduct.set(r.productId, e);
+        byProduct.set(k, e);
       }
       list = [...byProduct.values()].map(({ p, cost, costQty }) => ({ p, buy: costQty ? cost / costQty : null }));
     } else {
@@ -314,13 +406,13 @@ function Market({ t, rows, catalog, photos, game }) {
       return { p, now, c7: change(now, p.prices.avg7), c30: change(now, p.prices.avg30), cb: change(now, buy) };
     });
     out.sort((a, b) => {
-      if (sortKey === 'name') return dir * a.p.name.localeCompare(b.p.name);
+      if (sortKey === 'name') return dir * nm(a.p).localeCompare(nm(b.p));
       const av = a[sortKey], bv = b[sortKey];
       if (av == null || bv == null) return (av == null) - (bv == null); // leere Werte ans Ende
       return dir * (av - bv);
     });
     return out.slice(0, 150);
-  }, [catalog, rows, scope, min, q, sortKey, dir]);
+  }, [catalog, rows, scope, min, q, sortKey, dir, nm]);
 
   const head = (key, label) => (
     <th className={key === 'name' ? '' : 'num'}>
@@ -341,6 +433,7 @@ function Market({ t, rows, catalog, photos, game }) {
         <button className={scope === 'mine' ? 'on' : ''} onClick={() => setScope('mine')}>{t('onlyMine')}</button>
         <button className={scope === 'all' ? 'on' : ''} onClick={() => setScope('all')}>{t('allSealed')}</button>
       </div>
+      {scope === 'all' && <GamePicker games={games} game={game} setGame={setGame} />}
       <div className="row gap">
         <input type="search" placeholder={t('filter')} value={q} onChange={(e) => setQ(e.target.value)} />
         {scope === 'all' && (
@@ -367,11 +460,11 @@ function Market({ t, rows, catalog, photos, game }) {
             </thead>
             <tbody>
               {data.map((r) => (
-                <tr key={r.p.id}>
+                <tr key={`${r.p.game}-${r.p.id}`}>
                   <td>
-                    <a className="prod" href={cardmarketUrl(game, r.p.name)} target="_blank" rel="noreferrer">
-                      <Thumb src={photos[photoKey(game, r.p.id)]} name={r.p.name} size={32} />
-                      <span><span className="pname">{r.p.name}</span><span className="sub">{r.p.category}</span></span>
+                    <a className="prod" href={cardmarketUrl(urlNameOf(r.p.game), r.p.name)} target="_blank" rel="noreferrer">
+                      <Thumb src={photos[photoKey(r.p.game, r.p.id)] || r.p.image} name={nm(r.p)} size={36} />
+                      <span><span className="pname">{nm(r.p)}</span><span className="sub">{r.p.category}</span></span>
                     </a>
                   </td>
                   <td className="num">{eur(r.now)}</td>
@@ -388,7 +481,7 @@ function Market({ t, rows, catalog, photos, game }) {
   );
 }
 
-function AddProduct({ t, catalog, state, update, field, onDone, startScan, photos, savePhoto, removePhoto }) {
+function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startScan, photos, savePhoto, removePhoto, games, game, setGame, nm, folders, folder }) {
   const [scanning, setScanning] = useState(startScan);
   const [ean, setEan] = useState('');
   const [q, setQ] = useState('');
@@ -397,7 +490,7 @@ function AddProduct({ t, catalog, state, update, field, onDone, startScan, photo
   const [buy, setBuy] = useState('');
   const [date, setDate] = useState(today());
   const [note, setNote] = useState('');
-  const game = state.settings.game;
+  const [folderId, setFolderId] = useState(folder !== 'all' ? folder : null);
 
   const results = useMemo(() => (catalog ? search(catalog.list, q) : []), [catalog, q]);
 
@@ -405,28 +498,29 @@ function AddProduct({ t, catalog, state, update, field, onDone, startScan, photo
     setScanning(false);
     setEan(code);
     const known = state.barcodes[code];
-    if (known && catalog?.byId.has(known.productId)) {
-      setPicked(catalog.byId.get(known.productId));
+    const p = known && catalogs?.[known.game]?.byId.get(known.productId);
+    if (p) {
+      setPicked(p);
       setNote('');
     } else {
       setPicked(null);
       setNote(t('unknownBarcode'));
     }
-  }, [state.barcodes, catalog, t]);
+  }, [state.barcodes, catalogs, t]);
 
   const add = () => {
     const price = buy === '' ? null : Number(String(buy).replace(',', '.'));
     update((s) => ({
       ...s,
-      holdings: [...s.holdings, { id: uid(), game, productId: picked.id, name: picked.name, category: picked.category, qty: Math.max(1, Number(qty) || 1), buyPrice: Number.isFinite(price) ? price : null, buyDate: date || null }],
-      barcodes: ean ? { ...s.barcodes, [ean]: { game, productId: picked.id } } : s.barcodes,
+      holdings: [...s.holdings, { id: uid(), game: picked.game, productId: picked.id, name: picked.name, category: picked.category, qty: Math.max(1, Number(qty) || 1), buyPrice: Number.isFinite(price) ? price : null, buyDate: date || null, folderId }],
+      barcodes: ean ? { ...s.barcodes, [ean]: { game: picked.game, productId: picked.id } } : s.barcodes,
     }));
     onDone();
   };
 
   if (scanning) return <Scanner t={t} onResult={onScan} onClose={() => setScanning(false)} />;
 
-  const pkey = picked && photoKey(game, picked.id);
+  const pkey = picked && photoKey(picked.game, picked.id);
   return (
     <div className="stack">
       <button className="primary big-btn" onClick={() => setScanning(true)}>{t('scanBarcode')}</button>
@@ -435,14 +529,15 @@ function AddProduct({ t, catalog, state, update, field, onDone, startScan, photo
 
       {!picked && (
         <>
+          <GamePicker games={games} game={game} setGame={setGame} />
           <input type="search" placeholder={t('searchPlaceholder')} value={q} onChange={(e) => setQ(e.target.value)} />
           {!catalog && <p className="sub">{t('loadingCatalog')}</p>}
           <ul className="list">
             {results.map((p) => (
               <li key={p.id}>
                 <button className="result" onClick={() => setPicked(p)}>
-                  <Thumb src={photos[photoKey(game, p.id)]} name={p.name} size={40} />
-                  <span className="grow"><span className="name">{p.name}</span><span className="sub">{p.category}</span></span>
+                  <Thumb src={photos[photoKey(p.game, p.id)] || p.image} name={nm(p)} size={44} />
+                  <span className="grow"><span className="name">{nm(p)}</span><span className="sub">{p.category}</span></span>
                   <span>{eur(priceOf(p, field))}</span>
                 </button>
               </li>
@@ -455,9 +550,9 @@ function AddProduct({ t, catalog, state, update, field, onDone, startScan, photo
       {picked && (
         <div className="card stack">
           <div className="row">
-            <Thumb src={photos[pkey]} name={picked.name} size={64} />
+            <Thumb src={photos[pkey] || picked.image} name={nm(picked)} size={72} />
             <div className="grow">
-              <div className="name">{picked.name}</div>
+              <div className="name">{nm(picked)}</div>
               <div className="sub">{picked.category} · {t('currently', { v: eur(priceOf(picked, field)) })}</div>
             </div>
           </div>
@@ -465,6 +560,7 @@ function AddProduct({ t, catalog, state, update, field, onDone, startScan, photo
           <label>{t('quantity')}<input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} /></label>
           <label>{t('buyPriceOptional')}<input inputMode="decimal" value={buy} onChange={(e) => setBuy(e.target.value)} /></label>
           <label>{t('buyDate')}<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
+          <FolderSelect t={t} folders={folders} value={folderId} onChange={setFolderId} />
           {ean && <div className="sub">{t('barcodeAssign', { c: ean })}</div>}
           <div className="row gap wrap">
             <button className="primary" onClick={add}>{t('addToPortfolio')}</button>
@@ -545,13 +641,6 @@ function Settings({ t, state, update, index, lang, photos, setPhotos }) {
           {Object.entries(PRICE_FIELDS).map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}
         </select>
       </label>
-      {index && index.games.length > 1 && (
-        <label>{t('game')}
-          <select value={s.game} onChange={(e) => set({ game: Number(e.target.value) })}>
-            {index.games.map((g) => <option key={g.game} value={g.game}>{g.gameName}</option>)}
-          </select>
-        </label>
-      )}
       <div className="card stack">
         <div className="name">{t('transferTitle')}</div>
         <p className="sub">{t('transferText')}</p>

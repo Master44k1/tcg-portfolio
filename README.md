@@ -26,8 +26,9 @@ keinen Server.
 3. Die Action läuft bei jedem Push und täglich um 06:30 UTC. Die App liegt dann unter
    `https://<benutzer>.github.io/<repo>/`.
 
-Weitere Spiele: in der Workflow-Datei `GAMES` ergänzen (Cardmarket `idGame`: 1 Magic,
-3 Yu-Gi-Oh!, 6 Pokémon).
+Spiele: Pokémon und Cyberpunk TCG (Liste `GAMES` in `scripts/fetch-cardmarket.mjs`).
+Produktbilder kommen aus dem öffentlichen TCGplayer-Katalog (tcgcsv.com) und werden per
+Namensvergleich zugeordnet; nicht jedes Produkt bekommt ein Bild.
 
 ## Lokal entwickeln
 ```bash

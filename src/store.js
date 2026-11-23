@@ -5,6 +5,7 @@ const KEY = 'sealed-portfolio-v1';
 const empty = () => ({
   holdings: [], // {id, game, productId, name, category, qty, buyPrice, buyDate, note}
   barcodes: {}, // ean -> {game, productId}
+  folders: [], // {id, name}
   history: [], // {date, value, cost}
   settings: { priceField: 'trend', game: 6, lang: null, theme: 'auto', accent: 'gold', bg: 'glow' },
 });

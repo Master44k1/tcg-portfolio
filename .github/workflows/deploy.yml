@@ -26,8 +26,6 @@ jobs:
       - run: npm ci
       - name: Cardmarket-Preise holen
         run: npm run data
-        env:
-          GAMES: '6' # 6 = Pokémon; z. B. '6,1,3' für Pokémon, Magic, Yu-Gi-Oh!
       - run: npm run build
       - name: Auf gh-pages veröffentlichen
         uses: peaceiris/actions-gh-pages@v4

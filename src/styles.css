@@ -131,3 +131,10 @@ td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-n
   .prod .sub { display: none; }
   .prod .thumb { display: none; }
 }
+.stack.tight { gap: 8px; margin-bottom: 12px; }
+.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.chips .chip { white-space: nowrap; flex: none; }
+.chip.ghost { border-style: dashed; background: transparent; }
+.link.left { justify-self: start; font-size: 13px; }
+.folder-total { margin-bottom: 12px; }
+img.thumb { background: #fff; object-fit: contain; }

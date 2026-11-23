@@ -1,3 +1,4 @@
+import { germanName } from './names-de.js';
 // Lädt die täglich erzeugten Cardmarket-Preisdaten (siehe scripts/fetch-cardmarket.mjs).
 // Wert = i18n-Schlüssel
 export const PRICE_FIELDS = {
@@ -22,14 +23,19 @@ export async function loadGame(game) {
   const res = await fetch(`data/sealed-${game}.json`, { cache: 'no-cache' });
   if (!res.ok) throw new Error('Preisdaten nicht gefunden');
   const data = await res.json();
+  const de = data.key === 'pokemon' || data.game === 6;
   const byId = new Map();
   const list = data.rows.map((r) => {
+    const nameDe = de ? germanName(r[1]) : r[1];
     const p = {
       id: r[0],
+      game: data.game,
       name: r[1],
+      nameDe,
       category: r[2],
+      image: r[10] || null,
       prices: { trend: r[4], avg: r[5], low: r[6], avg7: r[7], avg30: r[8] },
-      search: `${r[1]} ${r[2]}`.toLowerCase(),
+      search: `${r[1]} ${nameDe} ${r[2]}`.toLowerCase(),
     };
     byId.set(p.id, p);
     return p;
@@ -68,9 +74,8 @@ export function search(list, q, limit = 40) {
   return out;
 }
 
-const URL_GAME = { 1: 'Magic', 3: 'YuGiOh', 6: 'Pokemon' };
-export function cardmarketUrl(game, name) {
-  return `https://www.cardmarket.com/de/${URL_GAME[game] || 'Pokemon'}/Products/Search?searchString=${encodeURIComponent(name)}`;
+export function cardmarketUrl(urlName, name) {
+  return `https://www.cardmarket.com/de/${urlName || 'Pokemon'}/Products/Search?searchString=${encodeURIComponent(name)}`;
 }
 
 export const eur = (v) =>

@@ -1,5 +1,16 @@
 // Übersetzungen. Neue Sprache: Objekt kopieren, übersetzen, in LANGS eintragen.
 const de = {
+  allItems: 'Alle',
+  newFolder: '+ Ordner',
+  folderName: 'Name des Ordners',
+  create: 'Anlegen',
+  rename: 'Umbenennen',
+  deleteFolder: 'Ordner löschen',
+  deleteFolderHint: 'Die Produkte bleiben im Portfolio, nur ohne Ordner.',
+  folder: 'Ordner',
+  noFolder: 'Kein Ordner',
+  folderEmpty: 'In diesem Ordner ist noch nichts. Ordne Produkte über „Bearbeiten“ zu oder füge neue hinzu.',
+  folderTotal: 'Ordner-Wert',
   portfolioValue: 'Portfoliowert',
   noBuyPrices: 'Noch keine Kaufpreise',
   products: '{n} Produkte',
@@ -100,6 +111,17 @@ const de = {
 };
 
 const en = {
+  allItems: 'All',
+  newFolder: '+ Folder',
+  folderName: 'Folder name',
+  create: 'Create',
+  rename: 'Rename',
+  deleteFolder: 'Delete folder',
+  deleteFolderHint: 'Products stay in your portfolio, just without a folder.',
+  folder: 'Folder',
+  noFolder: 'No folder',
+  folderEmpty: 'Nothing in this folder yet. Assign products via “Edit” or add new ones.',
+  folderTotal: 'Folder value',
   portfolioValue: 'Portfolio value',
   noBuyPrices: 'No purchase prices yet',
   products: '{n} products',
