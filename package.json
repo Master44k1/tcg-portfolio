@@ -1,0 +1,24 @@
+{
+  "name": "tcg-sealed-portfolio",
+  "version": "1.0.0",
+  "description": "Sealed-TCG-Portfolio mit Cardmarket-Preisen",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "data": "node scripts/fetch-cardmarket.mjs",
+    "data:sample": "node scripts/fetch-cardmarket.mjs --sample"
+  },
+  "dependencies": {
+    "barcode-detector": "^3.0.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.5.2",
+    "vite": "^6.3.5",
+    "vite-plugin-pwa": "^1.0.0"
+  },
+  "private": true,
+  "type": "module"
+}
