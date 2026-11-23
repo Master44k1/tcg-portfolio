@@ -21,11 +21,35 @@ export default function App() {
 
   useEffect(() => {
     let alive = true;
+    let stamp = null;
     setCatalog(null);
     Promise.all([loadIndex(), loadGame(game)])
-      .then(([idx, cat]) => { if (alive) { setIndex(idx); setCatalog(cat); setLoadError(''); } })
+      .then(([idx, cat]) => { if (alive) { stamp = idx.updatedAt; setIndex(idx); setCatalog(cat); setLoadError(''); } })
       .catch((e) => alive && setLoadError(e.message));
-    return () => { alive = false; };
+
+    // Neue Tagespreise automatisch nachladen: beim Zurückkehren in die App und alle 30 Minuten
+    const refresh = async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        const idx = await loadIndex();
+        if (!alive || idx.updatedAt === stamp) return;
+        const cat = await loadGame(game);
+        if (!alive) return;
+        stamp = idx.updatedAt;
+        setIndex(idx);
+        setCatalog(cat);
+        setLoadError('');
+      } catch {
+        /* offline: alte Preise behalten */
+      }
+    };
+    document.addEventListener('visibilitychange', refresh);
+    const timer = setInterval(refresh, 30 * 60 * 1000);
+    return () => {
+      alive = false;
+      document.removeEventListener('visibilitychange', refresh);
+      clearInterval(timer);
+    };
   }, [game]);
 
   const rows = useMemo(() => state.holdings.map((h) => {
