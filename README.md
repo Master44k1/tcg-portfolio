@@ -22,7 +22,7 @@ keinen Server.
 
 ## Einrichten (einmalig)
 1. Repository auf GitHub anlegen und diesen Code pushen.
-2. Unter **Settings → Pages → Build and deployment → Source** „GitHub Actions“ wählen.
+2. Die Action veröffentlicht auf den Branch `gh-pages`. Falls GitHub Pages nicht automatisch aktiv wird: **Settings → Pages → Source** „Deploy from a branch“, Branch `gh-pages` wählen.
 3. Die Action läuft bei jedem Push und täglich um 06:30 UTC. Die App liegt dann unter
    `https://<benutzer>.github.io/<repo>/`.
 
