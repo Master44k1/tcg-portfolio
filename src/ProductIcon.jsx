@@ -1,6 +1,7 @@
 // Symbolbild nach Produktart, wenn es kein Foto gibt.
 function kind(name, category) {
   const s = `${name} ${category}`.toLowerCase();
+  if (/\bcoin\b/.test(s)) return 'coin';
   if (/\bcase\b/.test(s)) return 'case';
   if (/elite trainer|top-trainer|\betb\b/.test(s)) return 'etb';
   if (/display|booster box/.test(s)) return 'display';
@@ -70,6 +71,12 @@ const SHAPES = {
     <>
       <rect x="8" y="14" width="48" height="38" rx="3" />
       <path d="M8 26h48M32 14v38" className="stroke2" />
+    </>
+  ),
+  coin: (
+    <>
+      <circle cx="32" cy="32" r="22" />
+      <circle cx="32" cy="32" r="14" className="fill2" />
     </>
   ),
   other: <rect x="14" y="14" width="36" height="36" rx="6" />,
