@@ -1,5 +1,15 @@
 // Übersetzungen. Neue Sprache: Objekt kopieren, übersetzen, in LANGS eintragen.
 const de = {
+  r1W: '1 Woche',
+  r1M: '1 Monat',
+  r1Y: '1 Jahr',
+  rALL: 'Alles',
+  showHistory: 'Verlauf',
+  hideHistory: 'Verlauf ausblenden',
+  estNote: 'Werte vor dem {d} sind aus Cardmarket-Durchschnitten geschätzt. Der Verlauf wächst ab jetzt jeden Tag.',
+  noHistory: 'Für diesen Zeitraum gibt es noch keinen Verlauf.',
+  portfolioChart: 'Portfoliowert',
+  trendOnly: 'Grafik nutzt den Trendpreis.',
   allItems: 'Alle',
   newFolder: '+ Ordner',
   folderName: 'Name des Ordners',
@@ -111,6 +121,16 @@ const de = {
 };
 
 const en = {
+  r1W: '1 week',
+  r1M: '1 month',
+  r1Y: '1 year',
+  rALL: 'All',
+  showHistory: 'History',
+  hideHistory: 'Hide history',
+  estNote: 'Values before {d} are estimated from Cardmarket averages. History grows every day from now on.',
+  noHistory: 'No history for this period yet.',
+  portfolioChart: 'Portfolio value',
+  trendOnly: 'Chart uses the trend price.',
   allItems: 'All',
   newFolder: '+ Folder',
   folderName: 'Folder name',

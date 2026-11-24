@@ -24,8 +24,21 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Bisherigen Preisverlauf holen
+        env:
+          REPO_URL: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}
+        run: |
+          git clone --depth 1 --branch history "$REPO_URL" history || {
+            mkdir -p history && cd history && git init -q -b history && git remote add origin "$REPO_URL"
+          }
       - name: Cardmarket-Preise holen
         run: npm run data
+      - name: Preisverlauf speichern
+        run: |
+          cd history
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -qm "Preise $(date -u +%F)" || exit 0
+          git push -q origin history
       - run: npm run build
       - name: Auf gh-pages veröffentlichen
         uses: peaceiris/actions-gh-pages@v4

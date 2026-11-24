@@ -138,3 +138,24 @@ td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-n
 .link.left { justify-self: start; font-size: 13px; }
 .folder-total { margin-bottom: 12px; }
 img.thumb { background: #fff; object-fit: contain; }
+.seg.small button { padding: 6px 4px; font-size: 13px; }
+.chart-inline { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.chart .seg.small { margin: 8px 0; }
+.chart-head { margin-top: 4px; }
+.pchart { width: 100%; height: 160px; display: block; touch-action: pan-y; cursor: crosshair; }
+.pchart .area { fill: color-mix(in srgb, var(--accent) 18%, transparent); stroke: none; }
+.pchart .area.neg { fill: color-mix(in srgb, var(--down) 14%, transparent); }
+.pchart path { fill: none; stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.pchart .line-value.neg { stroke: var(--down); }
+.pchart .line-cost { stroke-width: 1.5; }
+.pchart .cursor { stroke: var(--muted); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.axis { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.note { font-size: 12px; margin: 0; }
+.chart-empty { margin: 16px 0; text-align: center; }
+svg.thumb.icon { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); fill: var(--accent); padding: 4px; }
+svg.thumb.icon .fill2 { fill: color-mix(in srgb, var(--accent) 45%, var(--surface)); }
+svg.thumb.icon .stroke2 { stroke: color-mix(in srgb, var(--accent) 45%, var(--surface)); stroke-width: 3; fill: none; }
+tr.clickable { cursor: pointer; }
+tr.clickable.open td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.chart-row td { padding: 4px 10px 14px; }
+.chart-row .chart-inline { border-top: 0; margin-top: 0; }

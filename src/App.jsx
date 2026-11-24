@@ -5,6 +5,9 @@ import { loadIndex, loadGame, priceOf, search, cardmarketUrl, eur, pct, change, 
 import { LANGS, defaultLang, makeT } from './i18n.js';
 import { ACCENTS, applyTheme } from './theme.js';
 import { getAllPhotos, setPhoto, deletePhoto, fileToDataUrl } from './photos.js';
+import PriceChart from './PriceChart.jsx';
+import ProductIcon from './ProductIcon.jsx';
+import { loadHistories, priceAt, clearHistoryCache } from './history.js';
 
 const photoKey = (game, productId) => `${game}-${productId}`;
 
@@ -65,6 +68,7 @@ export default function App() {
       if (!alive) return;
       const map = {};
       idx.games.forEach((g, i) => { if (cats[i]) map[g.game] = cats[i]; });
+      if (stamp) clearHistoryCache();
       stamp = idx.updatedAt;
       setIndex(idx);
       setCatalogs(map);
@@ -101,6 +105,39 @@ export default function App() {
     return { value, cost, items, pl: value - cost, plPct: cost ? ((value - cost) / cost) * 100 : null };
   }, [rows]);
 
+  // Preisverlauf der eigenen Produkte laden
+  const [histories, setHistories] = useState({});
+  const holdingKeys = useMemo(() => [...new Set(state.holdings.map((h) => `${h.game}-${h.productId}`))].sort().join(','), [state.holdings]);
+  useEffect(() => {
+    if (!index || !holdingKeys) return;
+    let alive = true;
+    const items = holdingKeys.split(',').map((k) => { const [g, id] = k.split('-').map(Number); return { game: g, id }; });
+    loadHistories(items).then((h) => alive && setHistories(h));
+    return () => { alive = false; };
+  }, [index, holdingKeys]);
+
+  const chartRange = state.settings.chartRange || '1M';
+  const setChartRange = (r) => update((s) => ({ ...s, settings: { ...s.settings, chartRange: r } }));
+
+  // Portfoliowert je Tag = Summe (Menge × Trendpreis des Tages), Produkte erst ab Kaufdatum
+  const portfolioSeries = useCallback((holdings) => {
+    const hs = holdings.map((h) => ({ h, hist: histories[`${h.game}-${h.productId}`] })).filter((x) => x.hist);
+    if (!hs.length) return { series: [], estUntil: null };
+    const dates = [...new Set(hs.flatMap((x) => x.hist.dates))].sort();
+    const est = new Set(hs.flatMap((x) => x.hist.est));
+    const estUntil = dates.find((d) => !est.has(d)) || null;
+    const series = dates.map((date) => {
+      let value = 0, cost = 0;
+      for (const { h, hist } of hs) {
+        if (h.buyDate && h.buyDate > date) continue;
+        value += (priceAt(hist, date) ?? 0) * h.qty;
+        cost += (h.buyPrice || 0) * h.qty;
+      }
+      return { date, value: Math.round(value * 100) / 100, cost: cost || null };
+    });
+    return { series, estUntil };
+  }, [histories]);
+
   // Tageswert für den Verlauf speichern (ein Eintrag pro Tag)
   useEffect(() => {
     if (!catalogs || !state.holdings.length) return;
@@ -116,7 +153,7 @@ export default function App() {
   const games = index?.games || [];
   const urlNameOf = (g) => games.find((x) => x.game === g)?.urlName || 'Pokemon';
   const go = (next, mode) => { setAddMode(mode || 'search'); setTab(next); window.scrollTo(0, 0); };
-  const ctx = { t, update, catalog, catalogs, field, photos, savePhoto, removePhoto, game: catalog?.game ?? game, games, nm, urlNameOf, folders: state.folders || [], folder, setFolder, setGame: (g) => update((s) => ({ ...s, settings: { ...s.settings, game: g } })) };
+  const ctx = { t, update, histories, portfolioSeries, chartRange, setChartRange, catalog, catalogs, field, photos, savePhoto, removePhoto, game: catalog?.game ?? game, games, nm, urlNameOf, folders: state.folders || [], folder, setFolder, setGame: (g) => update((s) => ({ ...s, settings: { ...s.settings, game: g } })) };
 
   return (
     <div className="app">
@@ -154,12 +191,26 @@ export default function App() {
   );
 }
 
-function Thumb({ src, name, size = 48 }) {
+function Thumb({ src, name, category, size = 48 }) {
   const [broken, setBroken] = useState(false);
   useEffect(() => setBroken(false), [src]);
   if (src && !broken) return <img className="thumb" src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setBroken(true)} style={{ width: size, height: size }} />;
-  const initials = name.split(/\s+/).filter((w) => /^[A-Za-z0-9ÄÖÜäöü]/.test(w)).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-  return <div className="thumb placeholder" style={{ width: size, height: size }} aria-hidden="true">{initials}</div>;
+  return <ProductIcon name={name} category={category} size={size} />;
+}
+
+// Preisverlauf eines einzelnen Produkts
+function ProductHistory({ t, game, id, range, setRange, buyPrice }) {
+  const [hist, setHist] = useState(undefined);
+  useEffect(() => {
+    let alive = true;
+    loadHistories([{ game, id }]).then((h) => alive && setHist(h[`${game}-${id}`] || null));
+    return () => { alive = false; };
+  }, [game, id]);
+  if (hist === undefined) return <p className="sub">…</p>;
+  if (!hist) return <p className="sub">{t('noHistory')}</p>;
+  const series = hist.dates.map((date, i) => ({ date, value: hist.prices[i], cost: buyPrice || null }));
+  const estUntil = hist.dates.find((d) => !hist.est.includes(d)) || null;
+  return <PriceChart t={t} series={series} range={range} setRange={setRange} estUntil={estUntil} compact />;
 }
 
 function GamePicker({ games, game, setGame }) {
@@ -183,24 +234,12 @@ function PhotoButtons({ t, pkey, photos, savePhoto, removePhoto }) {
   );
 }
 
-function Sparkline({ history, t }) {
-  if (history.length < 2) return null;
-  const w = 600, h = 90, pad = 4;
-  const vals = history.flatMap((x) => [x.value, x.cost]);
-  const min = Math.min(...vals), max = Math.max(...vals);
-  const span = max - min || 1;
-  const pt = (v, i) => `${pad + (i / (history.length - 1)) * (w - 2 * pad)},${h - pad - ((v - min) / span) * (h - 2 * pad)}`;
-  const line = (k) => history.map((x, i) => pt(x[k], i)).join(' ');
-  return (
-    <div className="card chart">
-      <div className="label">{t('historySince', { d: fmtDate(history[0].date) })}</div>
-      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" role="img" aria-label={t('portfolioValue')}>
-        <polyline points={line('cost')} className="line-cost" />
-        <polyline points={line('value')} className="line-value" />
-      </svg>
-      <div className="legend"><span className="k-value">{t('value')}</span><span className="k-cost">{t('costLegend')}</span></div>
-    </div>
-  );
+function PortfolioChart({ t, visible, history, portfolioSeries, range, setRange }) {
+  const { series, estUntil } = useMemo(() => portfolioSeries(visible), [portfolioSeries, visible]);
+  // Ohne Server-Verlauf: lokal gespeicherte Tageswerte verwenden
+  const data = series.length >= 2 ? series : history;
+  if (data.length < 2) return null;
+  return <PriceChart t={t} series={data} range={range} setRange={setRange} title={t('portfolioChart')} estUntil={series.length >= 2 ? estUntil : null} />;
 }
 
 function FolderBar({ t, folders, folder, setFolder, update, rows }) {
@@ -252,8 +291,9 @@ function FolderBar({ t, folders, folder, setFolder, update, rows }) {
   );
 }
 
-function Portfolio({ t, rows, history, update, catalogs, onAdd, photos, savePhoto, removePhoto, folders, folder, setFolder, field, urlNameOf }) {
+function Portfolio({ t, rows, history, update, catalogs, portfolioSeries, chartRange, setChartRange, onAdd, photos, savePhoto, removePhoto, folders, folder, setFolder, field, urlNameOf }) {
   const [editing, setEditing] = useState(null);
+  const [openChart, setOpenChart] = useState(null);
   const [sort, setSort] = useState('value');
   const visible = useMemo(() => (folder === 'all' ? rows : rows.filter((r) => r.folderId === folder)), [rows, folder]);
   const sorted = useMemo(() => {
@@ -279,7 +319,7 @@ function Portfolio({ t, rows, history, update, catalogs, onAdd, photos, savePhot
   }
   return (
     <>
-      {folder === 'all' && <Sparkline history={history} t={t} />}
+      <PortfolioChart t={t} visible={visible} history={folder === 'all' ? history : []} portfolioSeries={portfolioSeries} range={chartRange} setRange={setChartRange} />
       <FolderBar t={t} folders={folders} folder={folder} setFolder={setFolder} update={update} rows={rows} />
       {folder !== 'all' && (
         <div className="card row between folder-total">
@@ -306,7 +346,7 @@ function Portfolio({ t, rows, history, update, catalogs, onAdd, photos, savePhot
           return (
             <li key={r.id} className="card">
               <div className="row top-align">
-                <Thumb src={photos[pkey] || r.product?.image} name={r.display} size={56} />
+                <Thumb src={photos[pkey] || r.product?.image} name={r.display} category={r.category} size={56} />
                 <div className="grow">
                   <div className="name">{r.display}</div>
                   <div className="sub">{r.category}{r.buyDate ? ` · ${t('bought', { d: fmtDate(r.buyDate) })}` : ''}</div>
@@ -320,9 +360,11 @@ function Portfolio({ t, rows, history, update, catalogs, onAdd, photos, savePhot
                 <span>{r.qty} × {eur(r.unit)} {r.buyPrice ? `(${t('buyShort', { v: eur(r.buyPrice) })})` : ''}</span>
                 <span className="row gap">
                   <a href={cardmarketUrl(urlNameOf(r.game), r.name)} target="_blank" rel="noreferrer">Cardmarket</a>
+                  <button className="link" onClick={() => setOpenChart(openChart === r.id ? null : r.id)}>{t('showHistory')}</button>
                   <button className="link" onClick={() => setEditing(editing === r.id ? null : r.id)}>{t('edit')}</button>
                 </span>
               </div>
+              {openChart === r.id && <ProductHistory t={t} game={r.game} id={r.productId} range={chartRange} setRange={setChartRange} buyPrice={r.buyPrice} />}
               {editing === r.id && (
                 <EditHolding t={t} holding={r} update={update} folders={folders} onClose={() => setEditing(null)}>
                   <PhotoButtons t={t} pkey={pkey} photos={photos} savePhoto={savePhoto} removePhoto={removePhoto} />
@@ -376,7 +418,8 @@ function EditHolding({ t, holding, update, folders, onClose, children }) {
 
 const MIN_PRICES = [0, 10, 25, 50, 100, 250];
 
-function Market({ t, rows, catalog, photos, game, games, setGame, nm, urlNameOf }) {
+function Market({ t, rows, catalog, photos, game, games, setGame, nm, urlNameOf, chartRange, setChartRange }) {
+  const [open, setOpen] = useState(null);
   const [scope, setScope] = useState(rows.length ? 'mine' : 'all');
   const [min, setMin] = useState(25);
   const [q, setQ] = useState('');
@@ -459,20 +502,31 @@ function Market({ t, rows, catalog, photos, game, games, setGame, nm, urlNameOf 
               </tr>
             </thead>
             <tbody>
-              {data.map((r) => (
-                <tr key={`${r.p.game}-${r.p.id}`}>
-                  <td>
-                    <a className="prod" href={cardmarketUrl(urlNameOf(r.p.game), r.p.name)} target="_blank" rel="noreferrer">
-                      <Thumb src={photos[photoKey(r.p.game, r.p.id)] || r.p.image} name={nm(r.p)} size={36} />
-                      <span><span className="pname">{nm(r.p)}</span><span className="sub">{r.p.category}</span></span>
-                    </a>
-                  </td>
-                  <td className="num">{eur(r.now)}</td>
-                  {cell(r.c7)}
-                  {cell(r.c30)}
-                  {scope === 'mine' && cell(r.cb)}
-                </tr>
-              ))}
+              {data.map((r) => {
+                const key = `${r.p.game}-${r.p.id}`;
+                return [
+                  <tr key={key} className={`clickable ${open === key ? 'open' : ''}`} onClick={() => setOpen(open === key ? null : key)}>
+                    <td>
+                      <span className="prod">
+                        <Thumb src={photos[photoKey(r.p.game, r.p.id)] || r.p.image} name={nm(r.p)} category={r.p.category} size={36} />
+                        <span><span className="pname">{nm(r.p)}</span><span className="sub">{r.p.category}</span></span>
+                      </span>
+                    </td>
+                    <td className="num">{eur(r.now)}</td>
+                    {cell(r.c7)}
+                    {cell(r.c30)}
+                    {scope === 'mine' && cell(r.cb)}
+                  </tr>,
+                  open === key && (
+                    <tr key={`${key}-chart`} className="chart-row">
+                      <td colSpan={scope === 'mine' ? 5 : 4}>
+                        <ProductHistory t={t} game={r.p.game} id={r.p.id} range={chartRange} setRange={setChartRange} />
+                        <a href={cardmarketUrl(urlNameOf(r.p.game), r.p.name)} target="_blank" rel="noreferrer">Cardmarket ↗</a>
+                      </td>
+                    </tr>
+                  ),
+                ];
+              })}
             </tbody>
           </table>
         </div>
@@ -536,7 +590,7 @@ function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startS
             {results.map((p) => (
               <li key={p.id}>
                 <button className="result" onClick={() => setPicked(p)}>
-                  <Thumb src={photos[photoKey(p.game, p.id)] || p.image} name={nm(p)} size={44} />
+                  <Thumb src={photos[photoKey(p.game, p.id)] || p.image} name={nm(p)} category={p.category} size={44} />
                   <span className="grow"><span className="name">{nm(p)}</span><span className="sub">{p.category}</span></span>
                   <span>{eur(priceOf(p, field))}</span>
                 </button>
@@ -550,7 +604,7 @@ function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startS
       {picked && (
         <div className="card stack">
           <div className="row">
-            <Thumb src={photos[pkey] || picked.image} name={nm(picked)} size={72} />
+            <Thumb src={photos[pkey] || picked.image} name={nm(picked)} category={picked.category} size={72} />
             <div className="grow">
               <div className="name">{nm(picked)}</div>
               <div className="sub">{picked.category} · {t('currently', { v: eur(priceOf(picked, field)) })}</div>

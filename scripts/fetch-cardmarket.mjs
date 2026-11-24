@@ -6,6 +6,7 @@
 //   node scripts/fetch-cardmarket.mjs --sample  -> Beispieldaten zum lokalen Testen
 import { mkdir, writeFile } from 'node:fs/promises';
 import { matchImages } from './match-images.mjs';
+import { updateHistory } from './history.mjs';
 
 const BASE = 'https://downloads.s3.cardmarket.com/productCatalog';
 const OUT = new URL('../public/data/', import.meta.url);
@@ -14,7 +15,7 @@ const UA = { 'User-Agent': 'tcg-sealed-portfolio (personal price tracker)' };
 
 // Spiele: feste Cardmarket-ID oder Erkennung über typische Produktnamen
 const GAMES = [
-  { key: 'pokemon', name: 'Pokémon', id: 6, url: 'Pokemon', tcgplayer: /^pokemon$/i },
+  { key: 'pokemon', name: 'Pokémon', id: 6, url: 'Pokemon', tcgplayer: /^pokemon( japan)?$/i },
   { key: 'cyberpunk', name: 'Cyberpunk TCG', detect: /night city|cyberpunk/i, url: 'Cyberpunk', tcgplayer: /cyberpunk/i },
 ];
 
@@ -46,10 +47,9 @@ async function detectGameId(pattern, skip) {
 async function tcgplayerSealed(pattern) {
   try {
     const cats = await getJson('https://tcgcsv.com/tcgplayer/categories');
-    const cat = cats.results.find((c) => pattern.test(c.name) || pattern.test(c.displayName || ''));
-    if (!cat) return [];
-    const groups = await getJson(`https://tcgcsv.com/tcgplayer/${cat.categoryId}/groups`);
     const out = [];
+    for (const cat of cats.results.filter((c) => pattern.test(c.name) || pattern.test(c.displayName || ''))) {
+    const groups = await getJson(`https://tcgcsv.com/tcgplayer/${cat.categoryId}/groups`);
     for (const g of groups.results) {
       try {
         const prods = await getJson(`https://tcgcsv.com/tcgplayer/${cat.categoryId}/${g.groupId}/products`);
@@ -62,6 +62,8 @@ async function tcgplayerSealed(pattern) {
         /* Gruppe überspringen */
       }
     }
+    }
+    console.log(`TCGplayer: ${out.length} Sealed-Produkte mit Bild geladen`);
     return out;
   } catch (e) {
     console.warn('TCGplayer-Katalog nicht verfügbar:', e.message);
@@ -86,6 +88,10 @@ async function buildGame(game, id) {
   });
   const withImg = images.filter(Boolean).length;
   console.log(`${game.name} (Cardmarket-ID ${id}): ${rows.length} Sealed-Produkte, ${withImg} mit Bild`);
+  // Beispiele ohne Bild ausgeben, um die Zuordnung weiter verbessern zu können
+  const missing = products.filter((_, i) => !images[i]).map((p) => p.name);
+  console.log('Ohne Bild (Auswahl):', missing.filter((_, i) => i % Math.max(1, Math.floor(missing.length / 40)) === 0).slice(0, 40).join(' | '));
+  await updateHistory(id, rows, guide.createdAt);
   return { game: id, key: game.key, gameName: game.name, urlName: game.url, createdAt: guide.createdAt || new Date().toISOString(), sample: false, rows };
 }
 
@@ -113,6 +119,7 @@ for (const game of GAMES) {
   used.add(id);
   try {
     const data = sample ? sampleGame(game, id) : await buildGame(game, id);
+    if (sample) await updateHistory(id, data.rows, data.createdAt, true);
     await writeFile(new URL(`sealed-${data.game}.json`, OUT), JSON.stringify(data));
     index.push({ game: data.game, key: data.key, gameName: data.gameName, urlName: data.urlName, createdAt: data.createdAt, count: data.rows.length, sample: data.sample });
   } catch (e) {
