@@ -32,6 +32,7 @@ export default function Scanner({ onResult, onClose, t }) {
   const [manual, setManual] = useState('');
   const [busy, setBusy] = useState(false);
   const [torch, setTorch] = useState(null); // null = nicht unterstützt
+  const [detail, setDetail] = useState(''); // technische Fehlermeldung zur Fehlersuche
 
   useEffect(() => {
     let stream;
@@ -57,25 +58,42 @@ export default function Scanner({ onResult, onClose, t }) {
         video.current.srcObject = stream;
         await video.current.play();
         const detector = await getDetector();
+        // Einzelbild in ein Canvas kopieren (zuverlässiger als direkt aus dem Video, v. a. auf dem iPhone)
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        let n = 0;
         const tick = async () => {
           if (stopped) return;
           try {
-            if (video.current.readyState >= 2) {
-              const codes = await detector.detect(video.current);
+            const v = video.current;
+            if (v && v.readyState >= 2 && v.videoWidth) {
+              // abwechselnd ganzes Bild und vergrößerter Mittelteil (Rahmen)
+              const crop = n++ % 2 === 1;
+              const sw = crop ? v.videoWidth * 0.8 : v.videoWidth;
+              const sh = crop ? v.videoHeight * 0.45 : v.videoHeight;
+              const sx = (v.videoWidth - sw) / 2, sy = (v.videoHeight - sh) / 2;
+              const scale = Math.min(1, 1280 / sw);
+              canvas.width = Math.round(sw * scale);
+              canvas.height = Math.round(sh * scale);
+              ctx.drawImage(v, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+              const codes = await detector.detect(ctx.getImageData(0, 0, canvas.width, canvas.height));
               if (codes.length) {
                 navigator.vibrate?.(80);
                 onResult(codes[0].rawValue);
                 return;
               }
             }
-          } catch {
-            /* nächster Versuch */
+          } catch (err) {
+            if (!stopped) setDetail(String(err?.message || err));
           }
-          timer = setTimeout(tick, 150);
+          timer = setTimeout(tick, 120);
         };
         tick();
       } catch (e) {
-        if (!stopped) setError(e?.name === 'NotAllowedError' ? 'cameraDenied' : 'noCamera');
+        if (!stopped) {
+          setError(e?.name === 'NotAllowedError' ? 'cameraDenied' : 'noCamera');
+          setDetail(`${e?.name || ''} ${e?.message || ''}`.trim());
+        }
       }
     })();
     return () => {
@@ -102,11 +120,18 @@ export default function Scanner({ onResult, onClose, t }) {
     try {
       const detector = await getDetector();
       const bmp = await createImageBitmap(file);
-      const codes = await detector.detect(bmp);
+      const c = document.createElement('canvas');
+      const scale = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+      c.width = Math.round(bmp.width * scale);
+      c.height = Math.round(bmp.height * scale);
+      const cx = c.getContext('2d');
+      cx.drawImage(bmp, 0, 0, c.width, c.height);
+      const codes = await detector.detect(cx.getImageData(0, 0, c.width, c.height));
       if (codes.length) onResult(codes[0].rawValue);
       else setError('noBarcodeInPhoto');
-    } catch {
+    } catch (err) {
       setError('noBarcodeInPhoto');
+      setDetail(String(err?.message || err));
     } finally {
       setBusy(false);
     }
@@ -129,6 +154,7 @@ export default function Scanner({ onResult, onClose, t }) {
         )}
       </div>
       {error === 'noBarcodeInPhoto' && <div className="banner">{t(error)}</div>}
+      {detail && <div className="sub">{t('cameraError', { e: detail })}</div>}
       <label className="button center">
         {busy ? '…' : t('photoOfBarcode')}
         <input type="file" accept="image/*" capture="environment" onChange={fromPhoto} hidden />

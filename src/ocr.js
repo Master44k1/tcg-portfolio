@@ -19,23 +19,43 @@ async function getWorker() {
   return workerPromise;
 }
 
-async function prepare(file) {
+// Bild auf sinnvolle Größe bringen; zweite Variante invertiert (helle Schrift auf dunklem Grund)
+async function variants(file) {
   const bmp = await createImageBitmap(file);
-  const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(bmp.width * scale);
-  c.height = Math.round(bmp.height * scale);
-  const ctx = c.getContext('2d');
-  ctx.filter = 'grayscale(1) contrast(1.4)';
-  ctx.drawImage(bmp, 0, 0, c.width, c.height);
+  const scale = Math.min(2, 2000 / Math.max(bmp.width, bmp.height));
+  const make = (invert) => {
+    const c = document.createElement('canvas');
+    c.width = Math.round(bmp.width * scale);
+    c.height = Math.round(bmp.height * scale);
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bmp, 0, 0, c.width, c.height);
+    if (invert) {
+      const img = ctx.getImageData(0, 0, c.width, c.height);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const g = 255 - (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11);
+        d[i] = d[i + 1] = d[i + 2] = g;
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+    return c;
+  };
+  const out = [make(false), make(true)];
   bmp.close?.();
-  return c;
+  return out;
 }
 
 export async function readText(file) {
   const worker = await getWorker();
-  const { data } = await worker.recognize(await prepare(file));
-  return data.text || '';
+  let text = '';
+  // Verpackungen haben verstreuten Text: "sparse text" (PSM 11) findet auch kleine Schriftzüge
+  const [normal, inverted] = await variants(file);
+  for (const [img, psm] of [[normal, '11'], [inverted, '11'], [normal, '3']]) {
+    await worker.setParameters({ tessedit_pageseg_mode: psm });
+    const { data } = await worker.recognize(img);
+    text += `${data.text || ''}\n`;
+  }
+  return text;
 }
 
 const STOP = new Set(['the', 'and', 'und', 'der', 'die', 'das', 'pokemon', 'pokémon', 'tcg', 'card', 'cards', 'game', 'karten', 'sammelkartenspiel', 'trading', 'with', 'mit', 'ages', 'contains', 'enthält']);
@@ -54,7 +74,7 @@ function idf(list) {
 }
 
 // Liefert die wahrscheinlichsten Produkte zum erkannten Text
-export function matchProducts(list, text, limit = 6) {
+export function matchProducts(list, text, limit = 10) {
   const seen = new Set(words(text));
   if (!seen.size) return [];
   const w = idf(list);

@@ -123,7 +123,7 @@ export default function App() {
   const chartRange = state.settings.chartRange || '1M';
   const setChartRange = (r) => update((s) => ({ ...s, settings: { ...s.settings, chartRange: r } }));
 
-  // Portfoliowert je Tag = Summe (Menge × Trendpreis des Tages), Produkte erst ab Kaufdatum
+  // Portfoliowert je Tag = Summe (Menge × Trendpreis des Tages)
   const portfolioSeries = useCallback((holdings) => {
     const hs = holdings.map((h) => ({ h, hist: histories[`${h.game}-${h.productId}`] })).filter((x) => x.hist);
     if (!hs.length) return { series: [], estUntil: null };
@@ -133,7 +133,7 @@ export default function App() {
     const series = dates.map((date) => {
       let value = 0, cost = 0;
       for (const { h, hist } of hs) {
-        if (h.buyDate && h.buyDate > date) continue;
+        // Wert des heutigen Bestands über die Zeit (unabhängig vom Kaufdatum)
         value += (priceAt(hist, date) ?? 0) * h.qty;
         cost += (h.buyPrice || 0) * h.qty;
       }
@@ -161,6 +161,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <AnimatedBg kind={bg} />
       <header className="top">
         <div>
           <div className="label">{t('portfolioValue')}</div>
@@ -191,6 +192,30 @@ export default function App() {
           <button key={k} className={tab === k ? 'on' : ''} onClick={() => go(k)}>{t(label)}</button>
         ))}
       </nav>
+    </div>
+  );
+}
+
+// Animierte Hintergründe (reine CSS-Animation, aus bei "Bewegung reduzieren")
+function AnimatedBg({ kind }) {
+  const items = useMemo(() => {
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    return Array.from({ length: kind === 'sparkle' ? 46 : 12 }, () => ({ x: rnd() * 100, y: rnd() * 100, d: 4 + rnd() * 10, delay: -rnd() * 20, s: 0.6 + rnd() * 0.9, r: rnd() * 40 - 20 }));
+  }, [kind]);
+  if (!['aurora', 'sparkle', 'float', 'waves'].includes(kind)) return null;
+  return (
+    <div className={`anim-bg ${kind}`} aria-hidden="true">
+      {kind === 'aurora' && <><i className="blob b1" /><i className="blob b2" /><i className="blob b3" /></>}
+      {kind === 'sparkle' && items.map((p, i) => (
+        <i key={i} className="star" style={{ left: `${p.x}%`, top: `${p.y}%`, animationDuration: `${2 + p.d / 3}s`, animationDelay: `${p.delay / 4}s`, transform: `scale(${p.s})` }} />
+      ))}
+      {kind === 'float' && items.map((p, i) => (
+        <i key={i} className="fcard" style={{ left: `${p.x}%`, animationDuration: `${14 + p.d * 2}s`, animationDelay: `${p.delay}s`, '--r': `${p.r}deg`, '--s': p.s }} />
+      ))}
+      {kind === 'waves' && [1, 2, 3].map((n) => (
+        <svg key={n} className={`wave w${n}`} viewBox="0 0 1200 120" preserveAspectRatio="none"><path d="M0,60 C150,110 450,10 600,60 C750,110 1050,10 1200,60 L1200,120 L0,120 Z" /></svg>
+      ))}
     </div>
   );
 }
@@ -312,6 +337,9 @@ function FolderBar({ t, folders, folder, setFolder, update, rows }) {
 function Portfolio({ t, rows, history, update, catalogs, portfolioSeries, chartRange, setChartRange, onAdd, photos, savePhoto, savePhotoUrl, removePhoto, folders, folder, setFolder, field, urlNameOf }) {
   const [editing, setEditing] = useState(null);
   const [openChart, setOpenChart] = useState(null);
+  const [active, setActive] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null);
+  const changeQty = (id, d) => update((s) => ({ ...s, holdings: s.holdings.map((h) => (h.id === id ? { ...h, qty: Math.max(1, h.qty + d) } : h)) }));
   const [sort, setSort] = useState('value');
   const visible = useMemo(() => (folder === 'all' ? rows : rows.filter((r) => r.folderId === folder)), [rows, folder]);
   const sorted = useMemo(() => {
@@ -362,8 +390,8 @@ function Portfolio({ t, rows, history, update, catalogs, portfolioSeries, chartR
           const pl = r.value == null ? null : r.value - r.cost;
           const pkey = photoKey(r.game, r.productId);
           return (
-            <li key={r.id} className="card">
-              <div className="row top-align">
+            <li key={r.id} className={`card holding ${active === r.id ? 'active' : ''}`}>
+              <div className="row top-align tap" role="button" tabIndex={0} onClick={() => { setActive(active === r.id ? null : r.id); setConfirmDel(null); }} onKeyDown={(e) => e.key === 'Enter' && setActive(active === r.id ? null : r.id)}>
                 <Thumb src={photos[pkey] || r.product?.image} name={r.display} category={r.category} size={56} />
                 <div className="grow">
                   <div className="name">{r.display}</div>
@@ -382,6 +410,24 @@ function Portfolio({ t, rows, history, update, catalogs, portfolioSeries, chartR
                   <button className="link" onClick={() => setEditing(editing === r.id ? null : r.id)}>{t('edit')}</button>
                 </span>
               </div>
+              {active === r.id && (
+                <div className="quick">
+                  <div className="stepper">
+                    <button aria-label="−" onClick={() => (r.qty <= 1 ? setConfirmDel(r.id) : changeQty(r.id, -1))}>−</button>
+                    <span className="qty">{r.qty}</span>
+                    <button aria-label="+" onClick={() => changeQty(r.id, 1)}>+</button>
+                  </div>
+                  {confirmDel === r.id ? (
+                    <span className="row gap">
+                      <span className="sub">{t('confirmRemove')}</span>
+                      <button className="danger" onClick={() => { update((s) => ({ ...s, holdings: s.holdings.filter((h) => h.id !== r.id) })); setActive(null); }}>{t('yesRemove')}</button>
+                      <button className="ghost" onClick={() => setConfirmDel(null)}>{t('cancel')}</button>
+                    </span>
+                  ) : (
+                    <button className="danger" onClick={() => setConfirmDel(r.id)}>{t('remove')}</button>
+                  )}
+                </div>
+              )}
               {openChart === r.id && <ProductHistory t={t} game={r.game} id={r.productId} range={chartRange} setRange={setChartRange} buyPrice={r.buyPrice} />}
               {editing === r.id && (
                 <EditHolding t={t} holding={r} update={update} folders={folders} onClose={() => setEditing(null)}>
@@ -393,6 +439,7 @@ function Portfolio({ t, rows, history, update, catalogs, portfolioSeries, chartR
         })}
       </ul>
       {!catalogs && <p className="sub center">{t('loadingPrices')}</p>}
+      <p className="sub center">{t('tapHint')}</p>
     </>
   );
 }
@@ -598,7 +645,7 @@ function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startS
       setNote('');
     } else {
       setPicked(null);
-      setNote(t('unknownBarcode'));
+      setNote(t('unknownBarcodeScanFront', { c: code }));
     }
   }, [state.barcodes, catalogs, t]);
 
@@ -647,13 +694,23 @@ function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startS
                 </>
               ) : <p className="sub">{t('noMatch')}</p>}
               {ocr.text?.trim() && <details className="sub"><summary>{t('recognizedText')}</summary><pre className="ocr-text">{ocr.text.trim()}</pre></details>}
-              {ocr.error && <p className="sub">{ocr.error}</p>}
+              {ocr.error && <p className="banner bad">{t('scanError', { e: ocr.error })}</p>}
             </>
           )}
         </div>
       )}
       {!scanning && <p className="sub">{t('scanFrontHint')}</p>}
-      {note && <div className="banner">{note}</div>}
+      {note && (
+        <div className="banner stack tight">
+          <span>{note}</span>
+          {ean && !picked && (
+            <label className="button primary center">
+              {t('scanFront')}
+              <input type="file" accept="image/*" capture="environment" hidden onChange={scanFront} />
+            </label>
+          )}
+        </div>
+      )}
 
       {!picked && (
         <>
@@ -751,9 +808,9 @@ function Settings({ t, state, update, index, lang, photos, setPhotos }) {
         </div>
         <div>
           <div className="label">{t('background')}</div>
-          <div className="seg">
-            {[['glow', 'bgGlow'], ['cards', 'bgCards'], ['plain', 'bgPlain']].map(([k, l]) => (
-              <button key={k} className={s.bg === k ? 'on' : ''} onClick={() => set({ bg: k })}>{t(l)}</button>
+          <div className="chips wrap-chips">
+            {[['glow', 'bgGlow'], ['aurora', 'bgAurora'], ['sparkle', 'bgSparkle'], ['float', 'bgFloat'], ['waves', 'bgWaves'], ['cards', 'bgCards'], ['plain', 'bgPlain']].map(([k, l]) => (
+              <button key={k} className={`chip ${s.bg === k ? 'on' : ''}`} onClick={() => set({ bg: k })}>{t(l)}</button>
             ))}
           </div>
         </div>

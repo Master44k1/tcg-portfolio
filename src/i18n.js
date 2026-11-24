@@ -1,5 +1,15 @@
 // Übersetzungen. Neue Sprache: Objekt kopieren, übersetzen, in LANGS eintragen.
 const de = {
+  confirmRemove: 'Wirklich entfernen?',
+  yesRemove: 'Ja, entfernen',
+  tapHint: 'Tipp: Produkt antippen für Menge + / − und Entfernen.',
+  bgAurora: 'Polarlicht',
+  bgSparkle: 'Funkeln',
+  bgFloat: 'Schwebende Karten',
+  bgWaves: 'Wellen',
+  unknownBarcodeScanFront: 'Barcode {c} ist noch unbekannt. Fotografiere jetzt die Vorderseite oder such das Produkt – danach erkennt die App den Barcode automatisch.',
+  cameraError: 'Kamera-Fehler: {e}',
+  scanError: 'Texterkennung fehlgeschlagen: {e}',
   scanFront: 'Vorderseite fotografieren',
   scanFrontHint: 'Erkennt das Produkt am Text auf der Packung (Setname, Produktart). Gut lesbar und gerade fotografieren.',
   reading: 'Lese Text … (beim ersten Mal ca. 10 MB Download)',
@@ -132,6 +142,16 @@ const de = {
 };
 
 const en = {
+  confirmRemove: 'Really remove?',
+  yesRemove: 'Yes, remove',
+  tapHint: 'Tip: tap a product for quantity + / − and remove.',
+  bgAurora: 'Aurora',
+  bgSparkle: 'Sparkle',
+  bgFloat: 'Floating cards',
+  bgWaves: 'Waves',
+  unknownBarcodeScanFront: 'Barcode {c} is not known yet. Photograph the front now or search for the product – then the app will recognise the barcode automatically.',
+  cameraError: 'Camera error: {e}',
+  scanError: 'Text recognition failed: {e}',
   scanFront: 'Photograph the front',
   scanFrontHint: 'Recognises the product from the text on the box (set name, product type). Take a sharp, straight photo.',
   reading: 'Reading text … (first time downloads about 10 MB)',

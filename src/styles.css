@@ -166,3 +166,28 @@ a.button { text-decoration: none; color: var(--text); }
 .check { display: flex; color: var(--text); font-size: 14px; }
 .check input { width: auto; }
 .ocr-text { white-space: pre-wrap; font-size: 12px; max-height: 160px; overflow: auto; background: var(--surface-2); padding: 8px; border-radius: 8px; }
+/* Animierte Hintergründe */
+.wrap-chips { flex-wrap: wrap; overflow: visible; margin-top: 6px; }
+.anim-bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.app { position: relative; z-index: 0; }
+.anim-bg .blob { position: absolute; width: 70vmax; height: 70vmax; border-radius: 50%; filter: blur(70px); opacity: .35; animation: drift 22s ease-in-out infinite alternate; }
+.anim-bg .b1 { background: var(--accent); top: -30vmax; left: -20vmax; }
+.anim-bg .b2 { background: color-mix(in srgb, var(--accent) 50%, #3b82f6); top: 20vh; right: -35vmax; animation-duration: 28s; animation-delay: -6s; }
+.anim-bg .b3 { background: color-mix(in srgb, var(--accent) 40%, #ec4899); bottom: -40vmax; left: 10vw; animation-duration: 34s; animation-delay: -12s; opacity: .25; }
+@keyframes drift { 0% { transform: translate(0, 0) scale(1); } 50% { transform: translate(8vw, 6vh) scale(1.15); } 100% { transform: translate(-6vw, 10vh) scale(.95); } }
+.anim-bg .star { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px 2px color-mix(in srgb, var(--accent) 70%, transparent); animation: twinkle 3s ease-in-out infinite; opacity: 0; }
+@keyframes twinkle { 0%, 100% { opacity: 0; } 50% { opacity: .9; } }
+.anim-bg .fcard { position: absolute; bottom: -120px; width: 46px; height: 64px; border-radius: 6px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 45%, transparent), color-mix(in srgb, var(--accent) 15%, transparent)); border: 1px solid color-mix(in srgb, var(--accent) 50%, transparent); animation: rise 20s linear infinite; }
+@keyframes rise { from { transform: translateY(0) rotate(var(--r)) scale(var(--s)); opacity: 0; } 10% { opacity: .7; } 90% { opacity: .7; } to { transform: translateY(-120vh) rotate(calc(var(--r) * -1)) scale(var(--s)); opacity: 0; } }
+.anim-bg .wave { position: absolute; bottom: 0; left: 0; width: 200%; height: 22vh; fill: color-mix(in srgb, var(--accent) 16%, transparent); animation: waves 14s linear infinite; }
+.anim-bg .w2 { height: 28vh; animation-duration: 20s; animation-direction: reverse; opacity: .7; }
+.anim-bg .w3 { height: 16vh; animation-duration: 10s; opacity: .8; }
+@keyframes waves { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .anim-bg * { animation: none !important; } .anim-bg .star { opacity: .5; } }
+/* Produkt antippen */
+.holding .tap { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.holding.active { box-shadow: 0 0 0 2px var(--accent); }
+.quick { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.stepper { display: flex; align-items: center; gap: 4px; background: var(--surface-2); border-radius: 12px; padding: 4px; }
+.stepper button { width: 44px; height: 40px; padding: 0; font-size: 22px; font-weight: 700; border: 0; background: var(--surface); }
+.stepper .qty { min-width: 40px; text-align: center; font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums; }
