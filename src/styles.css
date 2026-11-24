@@ -159,3 +159,10 @@ tr.clickable { cursor: pointer; }
 tr.clickable.open td { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .chart-row td { padding: 4px 10px 14px; }
 .chart-row .chart-inline { border-top: 0; margin-top: 0; }
+.scan-buttons { align-items: stretch; }
+.scan-buttons > * { flex: 1; }
+.scan-buttons .big-btn { font-size: 15px; padding: 14px 10px; display: flex; align-items: center; justify-content: center; text-align: center; }
+a.button { text-decoration: none; color: var(--text); }
+.check { display: flex; color: var(--text); font-size: 14px; }
+.check input { width: auto; }
+.ocr-text { white-space: pre-wrap; font-size: 12px; max-height: 160px; overflow: auto; background: var(--surface-2); padding: 8px; border-radius: 8px; }

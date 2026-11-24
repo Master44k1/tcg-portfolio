@@ -3,3 +3,4 @@ dist
 public/data/*.json
 history/
 public/data/history/
+public/ocr/

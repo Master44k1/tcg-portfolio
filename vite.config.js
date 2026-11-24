@@ -27,8 +27,10 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,wasm}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        globIgnores: ['ocr/**'],
         runtimeCaching: [
           { urlPattern: /\/data\/.*\.json$/, handler: 'NetworkFirst', options: { cacheName: 'price-data' } },
+          { urlPattern: /\/ocr\//, handler: 'CacheFirst', options: { cacheName: 'ocr' } },
         ],
       },
     }),

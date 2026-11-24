@@ -1,5 +1,16 @@
 // Übersetzungen. Neue Sprache: Objekt kopieren, übersetzen, in LANGS eintragen.
 const de = {
+  scanFront: 'Vorderseite fotografieren',
+  scanFrontHint: 'Erkennt das Produkt am Text auf der Packung (Setname, Produktart). Gut lesbar und gerade fotografieren.',
+  reading: 'Lese Text … (beim ersten Mal ca. 10 MB Download)',
+  suggestions: 'Erkannte Produkte – bitte das richtige antippen:',
+  noMatch: 'Kein Produkt erkannt. Versuch es näher am Setnamen oder such per Text.',
+  recognizedText: 'Erkannter Text',
+  useScanPhoto: 'Foto als Produktbild verwenden',
+  searchImage: 'Bild im Web suchen',
+  imageLink: 'Bild-Link einfügen',
+  imageLinkPlaceholder: 'https://… (Link zu einem Bild)',
+  imageHint: 'Tipp: „Bild im Web suchen“, Bild lange antippen, „Bildadresse kopieren“ und hier einfügen – oder Bild speichern und über „Foto hinzufügen“ wählen.',
   r1W: '1 Woche',
   r1M: '1 Monat',
   r1Y: '1 Jahr',
@@ -121,6 +132,17 @@ const de = {
 };
 
 const en = {
+  scanFront: 'Photograph the front',
+  scanFrontHint: 'Recognises the product from the text on the box (set name, product type). Take a sharp, straight photo.',
+  reading: 'Reading text … (first time downloads about 10 MB)',
+  suggestions: 'Recognised products – tap the right one:',
+  noMatch: 'No product recognised. Try closer to the set name or search by text.',
+  recognizedText: 'Recognised text',
+  useScanPhoto: 'Use photo as product image',
+  searchImage: 'Search image on the web',
+  imageLink: 'Paste image link',
+  imageLinkPlaceholder: 'https://… (link to an image)',
+  imageHint: 'Tip: “Search image on the web”, long-press an image, “Copy image address” and paste it here – or save the image and pick it via “Add photo”.',
   r1W: '1 week',
   r1M: '1 month',
   r1Y: '1 year',

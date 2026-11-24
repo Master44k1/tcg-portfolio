@@ -53,6 +53,10 @@ export default function App() {
     setPhotos((p) => ({ ...p, [key]: url }));
     try { await setPhoto(key, url); } catch { /* nur für diese Sitzung */ }
   }, []);
+  const savePhotoUrl = useCallback(async (key, url) => {
+    setPhotos((p) => ({ ...p, [key]: url }));
+    try { await setPhoto(key, url); } catch { /* nur für diese Sitzung */ }
+  }, []);
   const removePhoto = useCallback(async (key) => {
     setPhotos((p) => { const n = { ...p }; delete n[key]; return n; });
     try { await deletePhoto(key); } catch { /* egal */ }
@@ -153,7 +157,7 @@ export default function App() {
   const games = index?.games || [];
   const urlNameOf = (g) => games.find((x) => x.game === g)?.urlName || 'Pokemon';
   const go = (next, mode) => { setAddMode(mode || 'search'); setTab(next); window.scrollTo(0, 0); };
-  const ctx = { t, update, histories, portfolioSeries, chartRange, setChartRange, catalog, catalogs, field, photos, savePhoto, removePhoto, game: catalog?.game ?? game, games, nm, urlNameOf, folders: state.folders || [], folder, setFolder, setGame: (g) => update((s) => ({ ...s, settings: { ...s.settings, game: g } })) };
+  const ctx = { t, update, histories, portfolioSeries, chartRange, setChartRange, catalog, catalogs, field, photos, savePhoto, savePhotoUrl, removePhoto, game: catalog?.game ?? game, games, nm, urlNameOf, folders: state.folders || [], folder, setFolder, setGame: (g) => update((s) => ({ ...s, settings: { ...s.settings, game: g } })) };
 
   return (
     <div className="app">
@@ -222,14 +226,28 @@ function GamePicker({ games, game, setGame }) {
   );
 }
 
-function PhotoButtons({ t, pkey, photos, savePhoto, removePhoto }) {
+function PhotoButtons({ t, pkey, photos, savePhoto, savePhotoUrl, removePhoto, name }) {
+  const [link, setLink] = useState(null);
   return (
-    <div className="row gap wrap">
-      <label className="button">
-        {photos[pkey] ? t('changePhoto') : t('addPhoto')}
-        <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) savePhoto(pkey, f); }} />
-      </label>
-      {photos[pkey] && <button className="ghost" onClick={() => removePhoto(pkey)}>{t('removePhoto')}</button>}
+    <div className="stack tight">
+      <div className="row gap wrap">
+        <label className="button">
+          {photos[pkey] ? t('changePhoto') : t('addPhoto')}
+          <input type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) savePhoto(pkey, f); }} />
+        </label>
+        {name && <a className="button" href={`https://www.google.com/search?tbm=isch&q=${encodeURIComponent(name)}`} target="_blank" rel="noreferrer">{t('searchImage')}</a>}
+        {savePhotoUrl && <button onClick={() => setLink(link == null ? '' : null)}>{t('imageLink')}</button>}
+        {photos[pkey] && <button className="ghost" onClick={() => removePhoto(pkey)}>{t('removePhoto')}</button>}
+      </div>
+      {link != null && (
+        <form className="stack tight" onSubmit={(e) => { e.preventDefault(); const u = link.trim(); if (/^https?:\/\//.test(u)) { savePhotoUrl(pkey, u); setLink(null); } }}>
+          <div className="row gap">
+            <input type="url" inputMode="url" placeholder={t('imageLinkPlaceholder')} value={link} onChange={(e) => setLink(e.target.value)} />
+            <button className="primary" type="submit">OK</button>
+          </div>
+          <p className="sub">{t('imageHint')}</p>
+        </form>
+      )}
     </div>
   );
 }
@@ -291,7 +309,7 @@ function FolderBar({ t, folders, folder, setFolder, update, rows }) {
   );
 }
 
-function Portfolio({ t, rows, history, update, catalogs, portfolioSeries, chartRange, setChartRange, onAdd, photos, savePhoto, removePhoto, folders, folder, setFolder, field, urlNameOf }) {
+function Portfolio({ t, rows, history, update, catalogs, portfolioSeries, chartRange, setChartRange, onAdd, photos, savePhoto, savePhotoUrl, removePhoto, folders, folder, setFolder, field, urlNameOf }) {
   const [editing, setEditing] = useState(null);
   const [openChart, setOpenChart] = useState(null);
   const [sort, setSort] = useState('value');
@@ -367,7 +385,7 @@ function Portfolio({ t, rows, history, update, catalogs, portfolioSeries, chartR
               {openChart === r.id && <ProductHistory t={t} game={r.game} id={r.productId} range={chartRange} setRange={setChartRange} buyPrice={r.buyPrice} />}
               {editing === r.id && (
                 <EditHolding t={t} holding={r} update={update} folders={folders} onClose={() => setEditing(null)}>
-                  <PhotoButtons t={t} pkey={pkey} photos={photos} savePhoto={savePhoto} removePhoto={removePhoto} />
+                  <PhotoButtons t={t} pkey={pkey} photos={photos} savePhoto={savePhoto} savePhotoUrl={savePhotoUrl} removePhoto={removePhoto} name={`${r.name} ${r.category}`} />
                 </EditHolding>
               )}
             </li>
@@ -535,7 +553,7 @@ function Market({ t, rows, catalog, photos, game, games, setGame, nm, urlNameOf,
   );
 }
 
-function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startScan, photos, savePhoto, removePhoto, games, game, setGame, nm, folders, folder }) {
+function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startScan, photos, savePhoto, savePhotoUrl, removePhoto, games, game, setGame, nm, folders, folder }) {
   const [scanning, setScanning] = useState(startScan);
   const [ean, setEan] = useState('');
   const [q, setQ] = useState('');
@@ -544,6 +562,28 @@ function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startS
   const [buy, setBuy] = useState('');
   const [date, setDate] = useState(today());
   const [note, setNote] = useState('');
+  const [ocr, setOcr] = useState(null); // { busy, text, matches, file }
+  const [useScanPhoto, setUseScanPhoto] = useState(true);
+
+  const scanFront = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !catalog) return;
+    setNote('');
+    setPicked(null);
+    setOcr({ busy: true });
+    try {
+      const { readText, matchProducts } = await import('./ocr.js');
+      const text = await readText(file);
+      setOcr({ busy: false, text, matches: matchProducts(catalog.list, text), file });
+    } catch (err) {
+      setOcr({ busy: false, text: '', matches: [], error: String(err?.message || err) });
+    }
+  };
+  const pick = (p) => {
+    if (ocr?.file && useScanPhoto) savePhoto(photoKey(p.game, p.id), ocr.file);
+    setPicked(p);
+  };
   const [folderId, setFolderId] = useState(folder !== 'all' ? folder : null);
 
   const results = useMemo(() => (catalog ? search(catalog.list, q) : []), [catalog, q]);
@@ -577,8 +617,42 @@ function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startS
   const pkey = picked && photoKey(picked.game, picked.id);
   return (
     <div className="stack">
-      <button className="primary big-btn" onClick={() => setScanning(true)}>{t('scanBarcode')}</button>
+      <div className="row gap scan-buttons">
+        <button className="primary big-btn" onClick={() => setScanning(true)}>{t('scanBarcode')}</button>
+        <label className="button big-btn center">
+          {t('scanFront')}
+          <input type="file" accept="image/*" capture="environment" hidden onChange={scanFront} />
+        </label>
+      </div>
       {ean && <div className="sub">{t('scanned', { c: ean })}</div>}
+      {ocr && !picked && (
+        <div className="card stack">
+          {ocr.busy ? <p className="sub">{t('reading')}</p> : (
+            <>
+              {ocr.matches?.length ? (
+                <>
+                  <div className="name">{t('suggestions')}</div>
+                  <ul className="list">
+                    {ocr.matches.map((p) => (
+                      <li key={p.id}>
+                        <button className="result" onClick={() => pick(p)}>
+                          <Thumb src={photos[photoKey(p.game, p.id)] || p.image} name={nm(p)} category={p.category} size={44} />
+                          <span className="grow"><span className="name">{nm(p)}</span><span className="sub">{p.category}</span></span>
+                          <span>{eur(priceOf(p, field))}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <label className="row gap check"><input type="checkbox" checked={useScanPhoto} onChange={(e) => setUseScanPhoto(e.target.checked)} /> {t('useScanPhoto')}</label>
+                </>
+              ) : <p className="sub">{t('noMatch')}</p>}
+              {ocr.text?.trim() && <details className="sub"><summary>{t('recognizedText')}</summary><pre className="ocr-text">{ocr.text.trim()}</pre></details>}
+              {ocr.error && <p className="sub">{ocr.error}</p>}
+            </>
+          )}
+        </div>
+      )}
+      {!scanning && <p className="sub">{t('scanFrontHint')}</p>}
       {note && <div className="banner">{note}</div>}
 
       {!picked && (
@@ -589,7 +663,7 @@ function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startS
           <ul className="list">
             {results.map((p) => (
               <li key={p.id}>
-                <button className="result" onClick={() => setPicked(p)}>
+                <button className="result" onClick={() => pick(p)}>
                   <Thumb src={photos[photoKey(p.game, p.id)] || p.image} name={nm(p)} category={p.category} size={44} />
                   <span className="grow"><span className="name">{nm(p)}</span><span className="sub">{p.category}</span></span>
                   <span>{eur(priceOf(p, field))}</span>
@@ -610,7 +684,7 @@ function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startS
               <div className="sub">{picked.category} · {t('currently', { v: eur(priceOf(picked, field)) })}</div>
             </div>
           </div>
-          <PhotoButtons t={t} pkey={pkey} photos={photos} savePhoto={savePhoto} removePhoto={removePhoto} />
+          <PhotoButtons t={t} pkey={pkey} photos={photos} savePhoto={savePhoto} savePhotoUrl={savePhotoUrl} removePhoto={removePhoto} name={`${picked.name} ${picked.category}`} />
           <label>{t('quantity')}<input type="number" min="1" value={qty} onChange={(e) => setQty(e.target.value)} /></label>
           <label>{t('buyPriceOptional')}<input inputMode="decimal" value={buy} onChange={(e) => setBuy(e.target.value)} /></label>
           <label>{t('buyDate')}<input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></label>
