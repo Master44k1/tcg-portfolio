@@ -8,6 +8,7 @@ import { getAllPhotos, setPhoto, deletePhoto, fileToDataUrl } from './photos.js'
 import PriceChart from './PriceChart.jsx';
 import ProductIcon from './ProductIcon.jsx';
 import { loadHistories, priceAt, clearHistoryCache } from './history.js';
+import { catLabel, setCategoryLang } from './names-de.js';
 
 const photoKey = (game, productId) => `${game}-${productId}`;
 
@@ -31,6 +32,7 @@ export default function App() {
   const lang = state.settings.lang || defaultLang();
   const t = useMemo(() => makeT(lang), [lang]);
   setLocale(LANGS[lang]?.locale || 'de-DE');
+  setCategoryLang(lang);
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -395,7 +397,7 @@ function Portfolio({ t, rows, history, update, catalogs, portfolioSeries, chartR
                 <Thumb src={photos[pkey] || r.product?.image} name={r.display} category={r.category} size={56} />
                 <div className="grow">
                   <div className="name">{r.display}</div>
-                  <div className="sub">{r.category}{r.buyDate ? ` · ${t('bought', { d: fmtDate(r.buyDate) })}` : ''}</div>
+                  <div className="sub">{catLabel(r.category)}{r.buyDate ? ` · ${t('bought', { d: fmtDate(r.buyDate) })}` : ''}</div>
                 </div>
                 <div className="right">
                   <div className="name">{eur(r.value)}</div>
@@ -574,7 +576,7 @@ function Market({ t, rows, catalog, photos, game, games, setGame, nm, urlNameOf,
                     <td>
                       <span className="prod">
                         <Thumb src={photos[photoKey(r.p.game, r.p.id)] || r.p.image} name={nm(r.p)} category={r.p.category} size={36} />
-                        <span><span className="pname">{nm(r.p)}</span><span className="sub">{r.p.category}</span></span>
+                        <span><span className="pname">{nm(r.p)}</span><span className="sub">{catLabel(r.p.category)}</span></span>
                       </span>
                     </td>
                     <td className="num">{eur(r.now)}</td>
@@ -684,7 +686,7 @@ function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startS
                       <li key={p.id}>
                         <button className="result" onClick={() => pick(p)}>
                           <Thumb src={photos[photoKey(p.game, p.id)] || p.image} name={nm(p)} category={p.category} size={44} />
-                          <span className="grow"><span className="name">{nm(p)}</span><span className="sub">{p.category}</span></span>
+                          <span className="grow"><span className="name">{nm(p)}</span><span className="sub">{catLabel(p.category)}</span></span>
                           <span>{eur(priceOf(p, field))}</span>
                         </button>
                       </li>
@@ -722,7 +724,7 @@ function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startS
               <li key={p.id}>
                 <button className="result" onClick={() => pick(p)}>
                   <Thumb src={photos[photoKey(p.game, p.id)] || p.image} name={nm(p)} category={p.category} size={44} />
-                  <span className="grow"><span className="name">{nm(p)}</span><span className="sub">{p.category}</span></span>
+                  <span className="grow"><span className="name">{nm(p)}</span><span className="sub">{catLabel(p.category)}</span></span>
                   <span>{eur(priceOf(p, field))}</span>
                 </button>
               </li>
@@ -738,7 +740,7 @@ function AddProduct({ t, catalog, catalogs, state, update, field, onDone, startS
             <Thumb src={photos[pkey] || picked.image} name={nm(picked)} category={picked.category} size={72} />
             <div className="grow">
               <div className="name">{nm(picked)}</div>
-              <div className="sub">{picked.category} · {t('currently', { v: eur(priceOf(picked, field)) })}</div>
+              <div className="sub">{catLabel(picked.category)} · {t('currently', { v: eur(priceOf(picked, field)) })}</div>
             </div>
           </div>
           <PhotoButtons t={t} pkey={pkey} photos={photos} savePhoto={savePhoto} savePhotoUrl={savePhotoUrl} removePhoto={removePhoto} name={`${picked.name} ${picked.category}`} />
